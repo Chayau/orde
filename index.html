@@ -10,7 +10,8 @@
     label { display: block; margin-top: 10px; }
     input, select, button { width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: 1px solid #ccc; }
     button { background-color: #4CAF50; color: white; font-size: 16px; border: none; margin-top: 20px; cursor: pointer; }
-    button:hover { background-color: #45a049; }
+    button:disabled { background-color: gray; cursor: not-allowed; }
+    button:hover:not(:disabled) { background-color: #45a049; }
     small { color: gray; }
     .orders { margin-top: 20px; background: #fff; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
   </style>
@@ -39,12 +40,16 @@
     <label>วันที่รับของ:</label>
     <input type="date" id="pickupDate" required>
 
-    <button type="submit">ส่งออเดอร์</button>
+    <label>สถานที่จัดส่ง:</label>
+    <input type="text" id="address" required placeholder="กรอกสถานที่จัดส่ง">
+
+    <button type="submit" id="submitButton">ส่งออเดอร์</button>
   </form>
 
   <div class="orders">
     <h3>รายการสั่งซื้อ</h3>
     <ul id="orderList"></ul>
+    <p style="color: red;" id="limitMessage"></p>
   </div>
 
   <script>
@@ -53,6 +58,8 @@
     const stockInfo = document.getElementById("stockInfo");
     const quantityInput = document.getElementById("quantity");
     const orderList = document.getElementById("orderList");
+    const submitButton = document.getElementById("submitButton");
+    const limitMessage = document.getElementById("limitMessage");
 
     // สต๊อกสินค้า
     const stock = {
@@ -60,15 +67,27 @@
       "มะเขือเทศโซลาลีโน่": 15
     };
 
+    // จำกัดจำนวนออเดอร์ทั้งหมด
+    const MAX_ORDERS = 25;
+
     // โหลดข้อมูลออฟไลน์จาก Local Storage
     const loadOrders = () => {
       const orders = JSON.parse(localStorage.getItem("orders")) || [];
       orderList.innerHTML = "";
       orders.forEach(order => {
         const li = document.createElement("li");
-        li.textContent = `สินค้า: ${order.product}, จำนวน: ${order.quantity}, ชื่อ: ${order.name}, เบอร์: ${order.phone}, วันที่รับของ: ${order.pickupDate}`;
+        li.textContent = `สินค้า: ${order.product}, จำนวน: ${order.quantity}, ชื่อ: ${order.name}, เบอร์: ${order.phone}, วันที่รับของ: ${order.pickupDate}, สถานที่จัดส่ง: ${order.address}`;
         orderList.appendChild(li);
       });
+
+      // ตรวจสอบจำนวนออเดอร์
+      if (orders.length >= MAX_ORDERS) {
+        submitButton.disabled = true;
+        limitMessage.textContent = `ไม่สามารถสั่งซื้อได้อีก (จำนวนออเดอร์ครบ ${MAX_ORDERS} รายการแล้ว)`;
+      } else {
+        submitButton.disabled = false;
+        limitMessage.textContent = "";
+      }
     };
 
     // อัปเดตจำนวนคงเหลือเมื่อเลือกสินค้า
@@ -92,6 +111,7 @@
       const name = document.getElementById("name").value;
       const phone = document.getElementById("phone").value;
       const pickupDate = document.getElementById("pickupDate").value;
+      const address = document.getElementById("address").value;
 
       // ตรวจสอบสต๊อก
       if (stock[product] === undefined || quantity > stock[product]) {
@@ -104,7 +124,7 @@
 
       // บันทึกข้อมูลใน Local Storage
       const orders = JSON.parse(localStorage.getItem("orders")) || [];
-      orders.push({ product, quantity, name, phone, pickupDate });
+      orders.push({ product, quantity, name, phone, pickupDate, address });
       localStorage.setItem("orders", JSON.stringify(orders));
 
       // แสดงผลข้อมูลใหม่
