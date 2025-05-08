@@ -13,9 +13,8 @@
     button:disabled { background-color: gray; cursor: not-allowed; }
     button:hover:not(:disabled) { background-color: #45a049; }
     small { color: gray; }
-    .orders { margin-top: 20px; background: #fff; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
-    .admin-section { margin-top: 30px; text-align: center; }
-    .admin-section input { width: auto; display: inline-block; margin-right: 10px; }
+    .orders, .admin-section { margin-top: 20px; background: #fff; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+    .admin-section input[type="password"] { width: auto; display: inline-block; margin-right: 10px; }
   </style>
 </head>
 <body>
@@ -64,18 +63,26 @@
     <button id="resetButton">รีเซ็ตคำสั่งซื้อ</button>
   </div>
 
-  <script>
-    const form = document.getElementById("orderForm");
-    const productSelect = document.getElementById("product");
-    const priceOptions = document.getElementById("priceOptions");
-    const priceLabel = document.getElementById("priceLabel");
-    const stockInfo = document.getElementById("stockInfo");
-    const quantityInput = document.getElementById("quantity");
-    const totalPriceSpan = document.getElementById("totalPrice");
-    const orderList = document.getElementById("orderList");
-    const adminPasswordInput = document.getElementById("adminPassword");
-    const resetButton = document.getElementById("resetButton");
+  <div class="admin-section">
+    <h3>จัดการสต็อกสินค้า</h3>
+    <input type="password" id="stockAdminPassword" placeholder="รหัสผ่านผู้ดูแล" />
+    <button id="loadStockBtn">โหลดสต็อก</button>
 
+    <div id="stockEditor" style="display:none; margin-top: 20px;">
+      <label>เลือกสินค้า:</label>
+      <select id="adminProductSelect"></select>
+
+      <label>เลือกราคา:</label>
+      <select id="adminPriceSelect"></select>
+
+      <label>จำนวนใหม่:</label>
+      <input type="number" id="newStockValue" min="0"/>
+
+      <button id="updateStockBtn">อัปเดตสต็อก</button>
+    </div>
+  </div>
+
+  <script>
     const ADMIN_PASSWORD = "1234@min";
 
     const stockByPrice = {
@@ -97,13 +104,34 @@
       }
     };
 
+    const form = document.getElementById("orderForm");
+    const productSelect = document.getElementById("product");
+    const priceOptions = document.getElementById("priceOptions");
+    const priceLabel = document.getElementById("priceLabel");
+    const quantityInput = document.getElementById("quantity");
+    const stockInfo = document.getElementById("stockInfo");
+    const totalPriceSpan = document.getElementById("totalPrice");
+    const orderList = document.getElementById("orderList");
+    const submitButton = document.getElementById("submitButton");
+
+    const adminPasswordInput = document.getElementById("adminPassword");
+    const resetButton = document.getElementById("resetButton");
+
+    const stockAdminPasswordInput = document.getElementById("stockAdminPassword");
+    const loadStockBtn = document.getElementById("loadStockBtn");
+    const stockEditor = document.getElementById("stockEditor");
+    const adminProductSelect = document.getElementById("adminProductSelect");
+    const adminPriceSelect = document.getElementById("adminPriceSelect");
+    const newStockValueInput = document.getElementById("newStockValue");
+    const updateStockBtn = document.getElementById("updateStockBtn");
+
     const updatePriceOptions = () => {
       const product = productSelect.value;
       priceOptions.innerHTML = "";
       if (product && stockByPrice[product]) {
         Object.keys(stockByPrice[product]).forEach(price => {
-          const option = document.createElement("option");
           const priceData = stockByPrice[product][price];
+          const option = document.createElement("option");
           if (typeof priceData === "object") {
             option.textContent = `${priceData.weight} - ${price} บาท`;
           } else {
@@ -126,24 +154,17 @@
       const quantity = parseInt(quantityInput.value, 10) || 0;
 
       if (product && price) {
-        totalPriceSpan.textContent = price * quantity;
         const stockEntry = stockByPrice[product][price];
         const stock = typeof stockEntry === "object" ? stockEntry.stock : stockEntry;
         stockInfo.textContent = `คงเหลือ: ${stock || 0} ชิ้น`;
-        quantityInput.max = stock || 0;
+        totalPriceSpan.textContent = price * quantity;
+        submitButton.disabled = quantity > stock || stock === 0 || quantity === 0;
       } else {
-        totalPriceSpan.textContent = 0;
         stockInfo.textContent = "คงเหลือ: - ชิ้น";
+        totalPriceSpan.textContent = 0;
+        submitButton.disabled = true;
       }
     };
-
-    productSelect.addEventListener("change", () => {
-      updatePriceOptions();
-      calculateTotalPrice();
-    });
-
-    quantityInput.addEventListener("input", calculateTotalPrice);
-    priceOptions.addEventListener("change", calculateTotalPrice);
 
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -161,12 +182,16 @@
         return;
       }
 
+      const stockEntry = stockByPrice[product][price];
+      if ((typeof stockEntry === "object" ? stockEntry.stock : stockEntry) < quantity) {
+        alert("จำนวนสินค้าไม่พอในสต็อก");
+        return;
+      }
+
       const orders = JSON.parse(localStorage.getItem("orders")) || [];
-      const newOrder = { product, price, quantity, name, phone, pickupDate, address };
-      orders.push(newOrder);
+      orders.push({ product, price, quantity, name, phone, pickupDate, address });
       localStorage.setItem("orders", JSON.stringify(orders));
 
-      const stockEntry = stockByPrice[product][price];
       if (typeof stockEntry === "object") {
         stockEntry.stock -= quantity;
       } else {
@@ -175,37 +200,101 @@
 
       alert("ส่งคำสั่งซื้อเรียบร้อยแล้ว!");
       form.reset();
-      priceOptions.style.display = "none";
-      priceLabel.style.display = "none";
-      totalPriceSpan.textContent = 0;
-      stockInfo.textContent = "คงเหลือ: - ชิ้น";
-
+      updatePriceOptions();
+      calculateTotalPrice();
       loadOrdersFromLocalStorage();
-    });
-
-    resetButton.addEventListener("click", () => {
-      const adminPassword = adminPasswordInput.value;
-      if (adminPassword === ADMIN_PASSWORD) {
-        if (confirm("คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตคำสั่งซื้อทั้งหมด?")) {
-          localStorage.removeItem("orders");
-          alert("คำสั่งซื้อทั้งหมดถูกรีเซ็ตเรียบร้อยแล้ว!");
-          loadOrdersFromLocalStorage();
-          adminPasswordInput.value = "";
-        }
-      } else {
-        alert("รหัสผ่านไม่ถูกต้อง!");
-      }
     });
 
     const loadOrdersFromLocalStorage = () => {
       const orders = JSON.parse(localStorage.getItem("orders")) || [];
       orderList.innerHTML = "";
-      orders.forEach((order) => {
-        const li = document.createElement("li");
-        li.textContent = `สินค้า: ${order.product}, ราคา: ${order.price || "-"} บาท, จำนวน: ${order.quantity} ชิ้น, ชื่อ: ${order.name}, เบอร์: ${order.phone}, วันที่รับของ: ${order.pickupDate}, สถานที่จัดส่ง: ${order.address}`;
-        orderList.appendChild(li);
-      });
+      if (orders.length === 0) {
+        orderList.innerHTML = "<li>ไม่มีคำสั่งซื้อ</li>";
+      } else {
+        orders.forEach((order) => {
+          const li = document.createElement("li");
+          li.textContent = `สินค้า: ${order.product}, ราคา: ${order.price} บาท, จำนวน: ${order.quantity} ชิ้น, ชื่อ: ${order.name}, เบอร์: ${order.phone}, วันที่รับของ: ${order.pickupDate}, สถานที่จัดส่ง: ${order.address}`;
+          orderList.appendChild(li);
+        });
+      }
     };
+
+    resetButton.addEventListener("click", () => {
+      if (adminPasswordInput.value === ADMIN_PASSWORD) {
+        if (confirm("คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตคำสั่งซื้อทั้งหมด?")) {
+          localStorage.removeItem("orders");
+          alert("รีเซ็ตคำสั่งซื้อเรียบร้อยแล้ว");
+          loadOrdersFromLocalStorage();
+        }
+      } else {
+        alert("รหัสผ่านไม่ถูกต้อง");
+      }
+    });
+
+    const loadAdminProductOptions = () => {
+      adminProductSelect.innerHTML = "";
+      Object.keys(stockByPrice).forEach(product => {
+        const option = document.createElement("option");
+        option.value = product;
+        option.textContent = product;
+        adminProductSelect.appendChild(option);
+      });
+      loadAdminPriceOptions();
+    };
+
+    const loadAdminPriceOptions = () => {
+      const product = adminProductSelect.value;
+      adminPriceSelect.innerHTML = "";
+      if (stockByPrice[product]) {
+        Object.keys(stockByPrice[product]).forEach(price => {
+          const data = stockByPrice[product][price];
+          const option = document.createElement("option");
+          option.value = price;
+          option.textContent = typeof data === "object" ? `${data.weight} - ${price} บาท` : `${price} บาท`;
+          adminPriceSelect.appendChild(option);
+        });
+      }
+    };
+
+    adminProductSelect.addEventListener("change", loadAdminPriceOptions);
+
+    loadStockBtn.addEventListener("click", () => {
+      if (stockAdminPasswordInput.value === ADMIN_PASSWORD) {
+        stockEditor.style.display = "block";
+        loadAdminProductOptions();
+      } else {
+        alert("รหัสผ่านไม่ถูกต้อง");
+      }
+    });
+
+    updateStockBtn.addEventListener("click", () => {
+      const product = adminProductSelect.value;
+      const price = adminPriceSelect.value;
+      const newStock = parseInt(newStockValueInput.value, 10);
+
+      if (!product || !price || isNaN(newStock)) {
+        alert("กรุณาเลือกสินค้าและระบุจำนวนให้ถูกต้อง");
+        return;
+      }
+
+      const entry = stockByPrice[product][price];
+      if (typeof entry === "object") {
+        entry.stock = newStock;
+      } else {
+        stockByPrice[product][price] = newStock;
+      }
+
+      alert(`อัปเดตสต็อก ${product} ที่ราคา ${price} บาท เป็น ${newStock} ชิ้นเรียบร้อย`);
+      calculateTotalPrice();
+    });
+
+    productSelect.addEventListener("change", () => {
+      updatePriceOptions();
+      calculateTotalPrice();
+    });
+
+    priceOptions.addEventListener("change", calculateTotalPrice);
+    quantityInput.addEventListener("input", calculateTotalPrice);
 
     loadOrdersFromLocalStorage();
   </script>
